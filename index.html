@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>위탁교육 결과보고서 자동 작성기</title>
+    <!-- Google Fonts: Outfit (UI), Noto Sans KR (Korean Business Document Formal Font) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme"> <!-- Dark mode by default for premium visual aesthetic -->
+    <div class="app-container">
+        <!-- Top Navigation Bar -->
+        <header class="app-header">
+            <div class="header-logo">
+                <i class="fa-solid fa-graduation-cap logo-icon"></i>
+                <div class="logo-text">
+                    <h1>EduReport</h1>
+                    <span>위탁교육 결과보고서 자동화 시스템</span>
+                </div>
+            </div>
+            <div class="header-controls">
+                <div class="api-key-container">
+                    <i class="fa-solid fa-key api-icon"></i>
+                    <input type="password" id="geminiApiKey" placeholder="Gemini API Key 입력 (AI 파싱용)">
+                    <button id="saveApiKeyBtn" title="API Key 저장"><i class="fa-solid fa-save"></i></button>
+                    <a href="https://aistudio.google.com/" target="_blank" class="key-help" title="무료 API 키 발급 받기"><i class="fa-solid fa-circle-question"></i></a>
+                </div>
+                <button id="themeToggle" class="icon-btn" title="테마 변경">
+                    <i class="fa-solid fa-sun sun-icon"></i>
+                    <i class="fa-solid fa-moon moon-icon"></i>
+                </button>
+                <div class="preset-selector">
+                    <select id="presetSelect">
+                        <option value="">-- 샘플 데이터 선택 --</option>
+                        <option value="preset1">김인영 - MaaS 프로젝트 관리 과정</option>
+                        <option value="preset2">류OO - 안전보건경영시스템 내부심사원 교육</option>
+                    </select>
+                    <button id="loadPresetBtn" class="primary-btn-sm"><i class="fa-solid fa-cloud-arrow-down"></i> 로드</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace: Split Panel -->
+        <main class="app-workspace">
+            <!-- Left Side: Editor Form Panel -->
+            <section class="editor-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-pen-to-square"></i> 보고서 항목 작성</h2>
+                    <p>항목을 직접 기입하거나 아래 증빙 자료를 첨부해 보세요. AI가 자동으로 내용을 채워줍니다.</p>
+                </div>
+
+                <!-- AI Dropzones moved inside sections below -->
+
+                <!-- Input Form -->
+                <form id="reportForm" class="report-form" novalidate>
+                    <!-- 1. 인적 사항 -->
+                    <div class="form-section">
+                        <div class="section-title">
+                            <span class="step-num">1</span>
+                            <h3>신청자 인적사항</h3>
+                        </div>
+                        <div class="form-grid-3">
+                            <div class="input-group required-field">
+                                <label for="userDept"><i class="fa-solid fa-sitemap"></i> 소속</label>
+                                <input type="text" id="userDept" placeholder="예: 경영지원팀" required>
+                                <span class="error-msg">소속 부서를 입력해 주세요.</span>
+                            </div>
+                            <div class="input-group required-field">
+                                <label for="userPosition"><i class="fa-solid fa-id-card-clip"></i> 직위</label>
+                                <input type="text" id="userPosition" placeholder="예: 대리" required>
+                                <span class="error-msg">직위를 입력해 주세요.</span>
+                            </div>
+                            <div class="input-group required-field">
+                                <label for="userName"><i class="fa-solid fa-user"></i> 성명</label>
+                                <input type="text" id="userName" placeholder="예: 이시형" required>
+                                <span class="error-msg">성명을 입력해 주세요.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. 교육 개요 -->
+                    <div class="form-section">
+                        <div class="section-title">
+                            <span class="step-num">2</span>
+                            <h3>교육 정보</h3>
+                        </div>
+                        <div class="input-group required-field">
+                            <label for="courseName"><i class="fa-solid fa-book-open"></i> 교육과정명</label>
+                            <input type="text" id="courseName" placeholder="예: 안전보건경영시스템(ISO 45001) 구축 및 내부심사원 과정" required>
+                            <span class="error-msg">교육과정명을 입력해 주세요.</span>
+                        </div>
+                        <div class="form-grid-2">
+                            <div class="input-group required-field">
+                                <label for="courseHost"><i class="fa-solid fa-building-columns"></i> 교육주관</label>
+                                <input type="text" id="courseHost" placeholder="예: 한국산업안전협회" required>
+                                <span class="error-msg">교육주관 기관을 입력해 주세요.</span>
+                            </div>
+                            <div class="input-group required-field">
+                                <label for="courseLocation"><i class="fa-solid fa-location-dot"></i> 교육장소</label>
+                                <input type="text" id="courseLocation" placeholder="예: 서울 교육센터 (또는 재택, 온라인)" required>
+                                <span class="error-msg">교육장소를 입력해 주세요.</span>
+                            </div>
+                        </div>
+                        <div class="form-grid-2">
+                            <div class="input-group required-field">
+                                <label for="startDate"><i class="fa-solid fa-calendar-days"></i> 교육 시작일</label>
+                                <input type="date" id="startDate" required>
+                                <span class="error-msg">시작일을 설정해 주세요.</span>
+                            </div>
+                            <div class="input-group required-field">
+                                <label for="endDate"><i class="fa-solid fa-calendar-check"></i> 교육 종료일</label>
+                                <input type="date" id="endDate" required>
+                                <span class="error-msg">종료일을 설정해 주세요.</span>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Edu Document Dropzone -->
+                        <div class="file-uploader-section">
+                            <label class="section-upload-label"><i class="fa-solid fa-calendar-week"></i> 교육 일정표 / 안내문 첨부 (선택)</label>
+                            <div class="drop-zone-sm" id="dropZoneEdu">
+                                <i class="fa-solid fa-cloud-arrow-up drop-icon-sm"></i>
+                                <p>교육일정표 파일(이미지/PDF)을 여기에 드래그하거나 클릭하세요.</p>
+                                <input type="file" id="fileInputEdu" accept=".pdf,.png,.jpg,.jpeg" style="display:none;">
+                            </div>
+                            <div class="upload-list-sm" id="uploadListEdu"></div>
+                        </div>
+                    </div>
+
+                    <!-- 3. 소요 비용 -->
+                    <div class="form-section">
+                        <div class="section-title">
+                            <span class="step-num">3</span>
+                            <h3>소요 비용 (원)</h3>
+                            <span class="section-desc">숫자만 입력하면 한글 금액과 총액이 자동 계산됩니다.</span>
+                        </div>
+                        <div class="form-grid-2">
+                            <div class="input-group required-field">
+                                <label for="tuitionFee"><i class="fa-solid fa-money-check-dollar"></i> 수강료</label>
+                                <input type="number" id="tuitionFee" min="0" value="0" required>
+                                <span class="error-msg">수강료를 입력해 주세요. (없을 시 0)</span>
+                            </div>
+                            <div class="input-group">
+                                <label for="transportFee"><i class="fa-solid fa-plane-departure"></i> 출장비 - 교통비</label>
+                                <input type="number" id="transportFee" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="form-grid-3">
+                            <div class="input-group">
+                                <label for="hotelFee"><i class="fa-solid fa-hotel"></i> 출장비 - 숙박비</label>
+                                <input type="number" id="hotelFee" min="0" value="0">
+                            </div>
+                            <div class="input-group">
+                                <label for="mealFee"><i class="fa-solid fa-utensils"></i> 출장비 - 식비</label>
+                                <input type="number" id="mealFee" min="0" value="0">
+                            </div>
+                            <div class="input-group">
+                                <label for="allowanceFee"><i class="fa-solid fa-coins"></i> 출장비 - 일비</label>
+                                <input type="number" id="allowanceFee" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="calculation-summary">
+                            <div class="calc-row">
+                                <span>교육 소요비용:</span>
+                                <span id="tripSubtotal">0 원</span>
+                            </div>
+                            <div class="calc-row total-row">
+                                <span>총 합계금액 (수강료+교통비+숙박비+식비+일비):</span>
+                                <span id="totalCost">0 원</span>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Cost Document Dropzone -->
+                        <div class="file-uploader-section">
+                            <label class="section-upload-label"><i class="fa-solid fa-receipt"></i> 수강료 및 출장비(교통/숙박 등) 영수증 첨부 (다중 선택)</label>
+                            <div class="drop-zone-sm" id="dropZoneCost">
+                                <i class="fa-solid fa-cloud-arrow-up drop-icon-sm"></i>
+                                <p>영수증 파일들을 여기에 드래그하거나 클릭하세요. (합계 금액이 자동 누적됩니다.)</p>
+                                <input type="file" id="fileInputCost" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none;">
+                            </div>
+                            <div class="upload-list-sm" id="uploadListCost"></div>
+                        </div>
+                    </div>
+
+                    <!-- 4. 교육 소감 및 업무 활용 계획 -->
+                    <div class="form-section">
+                        <div class="section-title">
+                            <span class="step-num">4</span>
+                            <h3>교육 성과 및 소감</h3>
+                        </div>
+                        <div class="input-group required-field">
+                            <label for="courseOpinion"><i class="fa-solid fa-comment-dots"></i> 교육 소감</label>
+                            <textarea id="courseOpinion" rows="4" placeholder="교육을 수강하며 느낀 소감, 지식 획득 및 역량 향상 측면에 대해 서술해주세요." required></textarea>
+                            <span class="error-msg">교육 소감을 작성해 주세요.</span>
+                        </div>
+                        <div class="input-group required-field">
+                            <label for="courseContent"><i class="fa-solid fa-align-left"></i> 주요 교육 내용</label>
+                            <textarea id="courseContent" rows="6" placeholder="교육과정의 구체적인 학습 과목, 핵심 주제, 실습 내용을 줄바꿈을 사용하여 기입해주세요." required></textarea>
+                            <span class="error-msg">주요 교육 내용을 작성해 주세요.</span>
+                        </div>
+                        <div class="input-group">
+                            <label for="businessPlan"><i class="fa-solid fa-briefcase"></i> 업무 활용 계획 (5W 1H)</label>
+                            <textarea id="businessPlan" rows="4" placeholder="누가, 언제, 어디서, 무엇을, 어떻게, 왜 업무에 활용할 것인지 서술해 주세요."></textarea>
+                        </div>
+                        <div class="input-group">
+                            <label><i class="fa-solid fa-circle-check"></i> 업무수행 유용성 평가</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="usefulness" value="매우도움" checked>
+                                    <span>매우 도움</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="usefulness" value="참고">
+                                    <span>참고</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="usefulness" value="필요없음">
+                                    <span>필요 없음</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label><i class="fa-solid fa-graduation-cap"></i> 사내교육 도입 여부</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="intro" value="도입원함" checked>
+                                    <span>도입 원함</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="intro" value="검토필요">
+                                    <span>검토 필요</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="intro" value="필요없음">
+                                    <span>필요 없음</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Opinion Document Dropzone -->
+                        <div class="file-uploader-section">
+                            <label class="section-upload-label"><i class="fa-solid fa-file-pdf"></i> 교육 자료 / 교안 / 필기본 첨부 (선택)</label>
+                            <div class="drop-zone-sm" id="dropZoneOpinion">
+                                <i class="fa-solid fa-cloud-arrow-up drop-icon-sm"></i>
+                                <p>교안 자료(PDF/이미지)를 드래그하거나 클릭하여 소감 및 업무활용계획을 자동 생성하세요.</p>
+                                <input type="file" id="fileInputOpinion" accept=".pdf,.png,.jpg,.jpeg" style="display:none;">
+                            </div>
+                            <div class="upload-list-sm" id="uploadListOpinion"></div>
+                        </div>
+                    </div>
+
+                    <!-- Editor Actions -->
+                    <div class="form-actions">
+                        <button type="button" id="resetBtn" class="secondary-btn"><i class="fa-solid fa-rotate-left"></i> 작성 내용 초기화</button>
+                        <button type="submit" id="printBtn" class="primary-btn"><i class="fa-solid fa-print"></i> 보고서 인쇄 및 PDF 저장</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Right Side: Live Document Print Preview Panel -->
+            <section class="preview-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-file-pdf"></i> 실시간 결재용 프리뷰</h2>
+                    <p>실제 인쇄되거나 PDF로 저장될 결과보고서의 모습입니다. (마우스 휠/드래그로 확인)</p>
+                </div>
+                
+                <div class="preview-container">
+                    <!-- A4 Page Wrapper -->
+                    <div class="a4-page" id="documentSheet">
+                        <!-- Page 1: Main Report -->
+                        <div class="sheet-content">
+                            <!-- Document Header -->
+                            <div class="doc-header">
+                                <span class="doc-form-no">[별지 제3호 서식] (제26조 제1호 관련)</span>
+                            </div>
+
+                            <!-- Document Title -->
+                            <div class="doc-title-section">
+                                <div class="doc-title">위탁교육 결과보고서</div>
+                            </div>
+
+                            <!-- Main Information Table -->
+                            <table class="info-table">
+                                <tr>
+                                    <th style="width: 15%;">소 속</th>
+                                    <td style="width: 25%;" id="p_userDept">-</td>
+                                    <th style="width: 15%;">직 위</th>
+                                    <td style="width: 20%;" id="p_userPosition">-</td>
+                                    <th style="width: 10%;">성 명</th>
+                                    <td style="width: 15%;" id="p_userName">-</td>
+                                </tr>
+                                <tr>
+                                    <th>교 육 과 정</th>
+                                    <td colspan="5" id="p_courseName" class="bold-text">-</td>
+                                </tr>
+                                <tr>
+                                    <th>교 육 주 관</th>
+                                    <td colspan="2" id="p_courseHost">-</td>
+                                    <th>교 육 장 소</th>
+                                    <td colspan="2" id="p_courseLocation">-</td>
+                                </tr>
+                                <tr>
+                                    <th>교 육 기 간</th>
+                                    <td colspan="5" id="p_coursePeriod">-</td>
+                                </tr>
+                                <tr>
+                                    <th>수 강 료</th>
+                                    <td id="p_tuitionFee">-</td>
+                                    <th>출 장 비</th>
+                                    <td id="p_tripSubtotal" style="white-space: pre-line; font-size: 8.5pt; line-height: 1.3;">-</td>
+                                    <th>총 액</th>
+                                    <td id="p_totalCost" class="total-cost-cell">-</td>
+                                </tr>
+                                <tr>
+                                    <th class="vertical-header">교 육 소 감</th>
+                                    <td colspan="5" class="textarea-cell">
+                                        <div id="p_courseOpinion" class="text-content-area"></div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th class="vertical-header">주 요 교 육<br>내 용</th>
+                                    <td colspan="5" class="textarea-cell">
+                                        <div id="p_courseContent" class="text-content-area"></div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th class="vertical-header">업 무 활 용<br>계 획<br>(5W1H)</th>
+                                    <td colspan="5" class="textarea-cell">
+                                        <div id="p_businessPlan" class="text-content-area"></div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th rowspan="2" class="vertical-header" style="width: 15%;">평 가<br>(해당란에<br>○표)</th>
+                                    <th style="width: 15%;">업무수행 유용성</th>
+                                    <td colspan="4">
+                                        <div class="checkbox-preview">
+                                            <span class="chk-box" id="chk_help_very"><span class="box-frame">[   ]</span> 매우도움</span>
+                                            <span class="chk-box" id="chk_help_ref"><span class="box-frame">[   ]</span> 참고</span>
+                                            <span class="chk-box" id="chk_help_none"><span class="box-frame">[   ]</span> 필요 없음</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>사내교육 도입</th>
+                                    <td colspan="4">
+                                        <div class="checkbox-preview">
+                                            <span class="chk-box" id="chk_intro_yes"><span class="box-frame">[   ]</span> 도입원함</span>
+                                            <span class="chk-box" id="chk_intro_need"><span class="box-frame">[   ]</span> 검토필요</span>
+                                            <span class="chk-box" id="chk_intro_none"><span class="box-frame">[   ]</span> 필요 없음</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <div class="declaration-section">
+                                <p>위와 같이 위탁교육 결과를 보고합니다.</p>
+                                <div class="report-date" id="p_reportDate">2026 년 06 월 11 일</div>
+                                <div class="reporter-sig">보고자 : <span id="p_reporterName">-</span> (서명)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Annex Pages (Appended dynamically when receipts are uploaded) -->
+                    <div id="annexContainer"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- AI Parsing Loader Overlay -->
+    <div id="loaderOverlay" class="loader-overlay">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <h3>AI가 증빙 문서를 정밀 분석하고 있습니다...</h3>
+            <p id="loaderMessage">영수증에서 교통비, 일자, 교육정보를 매핑하는 중입니다.</p>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

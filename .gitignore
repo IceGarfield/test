@@ -1,0 +1,41 @@
+# Local environment files containing keys
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Sensitive files / documents / personal data (PDF, HWP, HWPX, Excel, CSV, PPT, PPTX)
+*.pdf
+*.hwp
+*.hwpx
+*.xls
+*.xlsx
+*.csv
+*.ppt
+*.pptx
+
+# Personal schedule / receipt images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.JPG
+
+# Common upload / data / backup / result directories
+data/
+upload/
+uploads/
+backup/
+backups/
+result/
+results/
+
+# OS / IDE / Build folders
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
+dist/
+build/

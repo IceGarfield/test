@@ -1,0 +1,1225 @@
+/* 
+ * EduReport Application Script - Section-Specific Uploaders & Cumulative Expenses Update
+ * Features:
+ * 1. Dedicated file upload zones for Step 2 (Schedule), Step 3 (Expenses), and Step 4 (Impressions).
+ * 2. Cumulative expenses logic (sums up tuition, transport, hotel, meal, and allowance fees from multiple receipts).
+ * 3. Specific Gemini AI prompt routing (excluding meals/walks in Step 2, generating 5W1H plans in Step 4).
+ * 4. Draft auto-saving and full preview rendering.
+ */
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Global error logger to local python server
+    window.onerror = function(message, source, lineno, colno, error) {
+        const errInfo = `Msg: ${message} | Line: ${lineno} | Col: ${colno} | Stack: ${error ? error.stack : ''}`;
+        fetch(`/window-error?info=${encodeURIComponent(errInfo)}`).catch(() => {});
+    };
+
+    // Section-specific file arrays
+    let attachedEduFiles = [];
+    let attachedCostFiles = [];
+    let attachedOpinionFiles = [];
+    
+    // DOM Elements - Settings & Controls
+    const geminiApiKeyInput = document.getElementById('geminiApiKey');
+    const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+    const themeToggleBtn = document.getElementById('themeToggle');
+    const presetSelect = document.getElementById('presetSelect');
+    const loadPresetBtn = document.getElementById('loadPresetBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const reportForm = document.getElementById('reportForm');
+    const printBtn = document.getElementById('printBtn');
+    const loaderOverlay = document.getElementById('loaderOverlay');
+    const loaderMessage = document.getElementById('loaderMessage');
+    const annexContainer = document.getElementById('annexContainer');
+
+    // Section 2: Education Info DOM Elements
+    const dropZoneEdu = document.getElementById('dropZoneEdu');
+    const fileInputEdu = document.getElementById('fileInputEdu');
+    const uploadListEdu = document.getElementById('uploadListEdu');
+
+    // Section 3: Cost/Expenses DOM Elements
+    const dropZoneCost = document.getElementById('dropZoneCost');
+    const fileInputCost = document.getElementById('fileInputCost');
+    const uploadListCost = document.getElementById('uploadListCost');
+
+    // Section 4: Opinion/Plan DOM Elements
+    const dropZoneOpinion = document.getElementById('dropZoneOpinion');
+    const fileInputOpinion = document.getElementById('fileInputOpinion');
+    const uploadListOpinion = document.getElementById('uploadListOpinion');
+
+    // Text inputs
+    const userDept = document.getElementById('userDept');
+    const userPosition = document.getElementById('userPosition');
+    const userName = document.getElementById('userName');
+    const courseName = document.getElementById('courseName');
+    const courseHost = document.getElementById('courseHost');
+    const courseLocation = document.getElementById('courseLocation');
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    
+    // Numeric inputs
+    const tuitionFee = document.getElementById('tuitionFee');
+    const transportFee = document.getElementById('transportFee');
+    const hotelFee = document.getElementById('hotelFee');
+    const mealFee = document.getElementById('mealFee');
+    const allowanceFee = document.getElementById('allowanceFee');
+
+    // Textareas & Radios
+    const courseOpinion = document.getElementById('courseOpinion');
+    const courseContent = document.getElementById('courseContent');
+    const businessPlan = document.getElementById('businessPlan');
+    
+    // Preview Targets
+    const p_userDept = document.getElementById('p_userDept');
+    const p_userPosition = document.getElementById('p_userPosition');
+    const p_userName = document.getElementById('p_userName');
+    const p_reporterName = document.getElementById('p_reporterName');
+    const p_courseName = document.getElementById('p_courseName');
+    const p_courseHost = document.getElementById('p_courseHost');
+    const p_courseLocation = document.getElementById('p_courseLocation');
+    const p_coursePeriod = document.getElementById('p_coursePeriod');
+    const p_tuitionFee = document.getElementById('p_tuitionFee');
+    // const p_transportFee, p_hotelFee, p_mealFee, p_allowanceFee removed as they are integrated into p_tripSubtotal
+    const p_tripSubtotal = document.getElementById('p_tripSubtotal');
+    const p_totalCost = document.getElementById('p_totalCost');
+    const p_courseOpinion = document.getElementById('p_courseOpinion');
+    const p_courseContent = document.getElementById('p_courseContent');
+    const p_businessPlan = document.getElementById('p_businessPlan');
+    const p_reportDate = document.getElementById('p_reportDate');
+
+    // Form elements array for bulk validation
+    const requiredInputs = [
+        { elem: userDept, name: '소속' },
+        { elem: userPosition, name: '직위' },
+        { elem: userName, name: '성명' },
+        { elem: courseName, name: '교육과정명' },
+        { elem: courseHost, name: '교육주관' },
+        { elem: courseLocation, name: '교육장소' },
+        { elem: startDate, name: '교육 시작일' },
+        { elem: endDate, name: '교육 종료일' },
+        { elem: tuitionFee, name: '수강료' },
+        { elem: courseOpinion, name: '교육 소감' },
+        { elem: courseContent, name: '주요 교육 내용' }
+    ];
+
+    // Presets configuration
+    const PRESETS = {
+        preset1: {
+            userDept: "MaaS추진단",
+            userPosition: "대리",
+            userName: "김인영",
+            courseName: "프로세스 기반의 IT프로젝트 관리 입문 과정",
+            courseHost: "한국인공지능 소프트웨어산업협회",
+            courseLocation: "한국인공지능 소프트웨어산업협회 교육장",
+            startDate: "2025-11-20",
+            endDate: "2025-11-21",
+            tuitionFee: 43340,
+            transportFee: 40000,
+            hotelFee: 0,
+            mealFee: 0,
+            allowanceFee: 0,
+            courseOpinion: "대규모 IT프로젝트를 처음 진행하면서 접했던 막연하게 어려웠던 부분들을 이번 교육을 통해 주요 관리 포인트, 유의사항, 과정별 핵심 산출물 등 다양한 지식을 얻을 수 있었습니다. 특히, 수행사의 입장에서 중요하게 생각하는 포인트, 사업과정별 준비사항, 발주사 대응내용을 접하면서 보다 발주사의 입장에서 어떻게 행동해야 하는지 고민할 수 있는 좋은 기회였습니다.",
+            courseContent: "- IT프로젝트 관리 기본 개념\n- IT프로젝트 관리 수명주기(착수-이행-종료)\n- IT프로젝트 계획 수립\n- IT프로젝트 수행계획서 작성\n- 작업분해구조(WBS) 작성\n- 산출물 정의\n- 일정계획 수립\n- 개발관리, 산출물관리, 단계말 보고, 종료보고\n- 일정관리, 범위관리, 이슈관리, 위험관리\n- 품질관리, 형상관리, 변경통제",
+            businessPlan: "현재 진행 중인 프로젝트의 사업관리 업무에 대하여 수행사에서 수립한 사업수행계획서 및 산출물을 바탕으로 미흡한 부분을 보완하고, 프로젝트의 중요 포인트에 대한 집중적인 관리와 위험·이슈에 대하여 철저하게 관리함으로서 성공적인 프로젝트 결과를 달성할 수 있도록 적용할 예정입니다.",
+            usefulness: "매우도움",
+            intro: "검토필요"
+        },
+        preset2: {
+            userDept: "산업재난안전처",
+            userPosition: "대리",
+            userName: "류OO",
+            courseName: "안전보건경영 시스템 내부심사원 양성교육",
+            courseHost: "국제심사평가센터",
+            courseLocation: "본사 2층 회의실",
+            startDate: "2023-11-22",
+            endDate: "2023-11-23",
+            tuitionFee: 396000,
+            transportFee: 40000,
+            hotelFee: 0,
+            mealFee: 0,
+            allowanceFee: 0,
+            courseOpinion: "기초적인 ISO(국제표준)에 대한 이해를 비롯하여, 기업이 경영을 할 시에 필요한 표준 체계를 파악할 수 있어 업무전반에 걸쳐 큰 도움이 될 것으로 생각합니다. 아울러, 어렴풋이 이해하던 PDCA의 구조를 구체적으로 파악할 수 있던 시간이었고, 또한 안전보건의 측면에서 PDCA를 실행하는 과정을 살펴보면서, 현재 제가 속한 “산업재난안전처”에서 해야 할 역할이 무엇인지 다시 한 번 생각할 수 있었습니다. 현 부서로 발령받은 지 얼마 되지 않은 이 시점의 저에겐 정말 많은 도움이 되었던 교육이었습니다.",
+            courseContent: "- 안전보건경영시스템(ISO 45001:2018) 개요, 정의 및 용어해설\n- OHSMS 요구사항 해설, 위험성 평가 기준 및 사례연구\n- 내부심사개요, 내부심사기법의 이해\n- 내부심사보고서·위험성평가표 작성, 부적합조항 및 부적합보고서 작성",
+            businessPlan: "- 본인은 2023년도 안전보건경영시스템 내부심사 시 내부심사원으로서 본 교육을 바탕으로 공명정대하게 심사를 진행할 것입니다. 본 교육에서 이해한 바와 같이 ISO 45001:2018의 지침 의거하여 심사할 것이며 본 심사로 우리 SR의 안전보건경영시스템이 원활하게 작동할 수 있도록 기여할 예정입니다.",
+            usefulness: "매우도움",
+            intro: "필요없음"
+        }
+    };
+
+    // Initialize Page
+    init();
+
+    function init() {
+        // Load Saved API Key
+        const savedKey = localStorage.getItem('edureport_gemini_api_key');
+        if (savedKey) {
+            geminiApiKeyInput.value = savedKey;
+            document.querySelector('.api-key-container').classList.add('api-key-saved');
+        }
+
+        // Set Default Date in preview (Current Time)
+        updateReportDate();
+
+        // Restore Draft if exists, otherwise load preset1 as placeholder default
+        const draft = localStorage.getItem('edureport_draft');
+        if (draft) {
+            try {
+                const data = JSON.parse(draft);
+                applyDataToForm(data);
+                
+                // Restore attached files metadata
+                if (data.attachedEduFiles) attachedEduFiles = data.attachedEduFiles;
+                if (data.attachedCostFiles) attachedCostFiles = data.attachedCostFiles;
+                if (data.attachedOpinionFiles) attachedOpinionFiles = data.attachedOpinionFiles;
+                
+                renderSectionFiles('edu');
+                renderSectionFiles('cost');
+                renderSectionFiles('opinion');
+                renderAnnexPages();
+                
+                showToast("임시 저장된 보고서 초안을 불러왔습니다.", "success");
+            } catch(e) {
+                applyDataToForm(PRESETS.preset1);
+            }
+        } else {
+            // Load preset1 by default
+            applyDataToForm(PRESETS.preset1);
+        }
+
+        // Live calculation and syncing
+        syncAll();
+
+        // Event Listeners for inputs
+        const allFormInputs = reportForm.querySelectorAll('input, select, textarea');
+        allFormInputs.forEach(input => {
+            input.addEventListener('input', () => {
+                syncAll();
+                saveDraft();
+            });
+            input.addEventListener('change', () => {
+                syncAll();
+                saveDraft();
+            });
+            // Remove error highlight on input
+            input.addEventListener('focus', () => {
+                const group = input.closest('.input-group');
+                if (group) group.classList.remove('input-invalid');
+            });
+        });
+
+        // Theme Toggle
+        themeToggleBtn.addEventListener('click', toggleTheme);
+
+        // API Key Save
+        saveApiKeyBtn.addEventListener('click', saveApiKey);
+        geminiApiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') saveApiKey();
+        });
+
+        // Presets load
+        loadPresetBtn.addEventListener('click', loadPreset);
+
+        // Reset
+        resetBtn.addEventListener('click', resetFormWithConfirm);
+
+        // Form Submit / Print
+        reportForm.addEventListener('submit', handleFormSubmit);
+
+        // ----------------------------------------------------
+        // Setup Section-Specific Drag & Drop Listeners
+        // ----------------------------------------------------
+
+        // Section 2: Education Info Dropzone
+        dropZoneEdu.addEventListener('click', () => fileInputEdu.click());
+        fileInputEdu.addEventListener('change', (e) => handleSectionFileSelect(e, 'edu'));
+        setupDropZoneHandlers(dropZoneEdu, 'edu');
+
+        // Section 3: Cost/Expenses Dropzone
+        dropZoneCost.addEventListener('click', () => fileInputCost.click());
+        fileInputCost.addEventListener('change', (e) => handleSectionFileSelect(e, 'cost'));
+        setupDropZoneHandlers(dropZoneCost, 'cost');
+
+        // Section 4: Opinion/Plan Dropzone
+        dropZoneOpinion.addEventListener('click', () => fileInputOpinion.click());
+        fileInputOpinion.addEventListener('change', (e) => handleSectionFileSelect(e, 'opinion'));
+        setupDropZoneHandlers(dropZoneOpinion, 'opinion');
+
+        // Global window level drag/drop prevention to stop browser page hijack
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        }, false);
+        
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+        }, false);
+    }
+
+    // Helper to configure drop zone animations and drop capture
+    function setupDropZoneHandlers(zoneElement, section) {
+        zoneElement.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            zoneElement.classList.add('dragover');
+        });
+        
+        zoneElement.addEventListener('dragleave', () => {
+            zoneElement.classList.remove('dragover');
+        });
+        
+        zoneElement.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            zoneElement.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processSectionFiles(files, section);
+            }
+        });
+    }
+
+    // Update Report Date to today
+    function updateReportDate() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        p_reportDate.textContent = `${year} 년 ${month} 월 ${day} 일`;
+    }
+
+    // Sync form inputs to preview pane
+    function syncAll() {
+        // Standard text fields
+        p_userDept.textContent = userDept.value || '-';
+        p_userPosition.textContent = userPosition.value || '-';
+        p_userName.textContent = userName.value || '-';
+        p_reporterName.textContent = userName.value || '-';
+        p_courseName.textContent = courseName.value || '-';
+        p_courseHost.textContent = courseHost.value || '-';
+        p_courseLocation.textContent = courseLocation.value || '-';
+
+        // Opinions & Contents (support white space format)
+        p_courseOpinion.textContent = courseOpinion.value || '';
+        p_courseContent.textContent = courseContent.value || '';
+        p_businessPlan.textContent = businessPlan.value || '';
+
+        // Period formatting
+        if (startDate.value && endDate.value) {
+            const start = new Date(startDate.value);
+            const end = new Date(endDate.value);
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive
+            p_coursePeriod.textContent = `${startDate.value} ~ ${endDate.value} (${diffDays}일간)`;
+        } else {
+            p_coursePeriod.textContent = '-';
+        }
+
+        // Numeric fields calculations
+        const tFee = Math.max(0, parseInt(tuitionFee.value) || 0);
+        const transFee = Math.max(0, parseInt(transportFee.value) || 0);
+        const hFee = Math.max(0, parseInt(hotelFee.value) || 0);
+        const mFee = Math.max(0, parseInt(mealFee.value) || 0);
+        const aFee = Math.max(0, parseInt(allowanceFee.value) || 0);
+
+        const tripSub = transFee + hFee + mFee + aFee;
+        const total = tFee + tripSub;
+
+        // Display in form
+        document.getElementById('tripSubtotal').textContent = tripSub.toLocaleString('ko-KR') + ' 원';
+        document.getElementById('totalCost').textContent = total.toLocaleString('ko-KR') + ' 원';
+
+        // Display in report template
+        p_tuitionFee.textContent = tFee > 0 ? tFee.toLocaleString('ko-KR') + ' 원' : '무료';
+        
+        let tripDetails = [];
+        if (transFee > 0) tripDetails.push(`교통비: ${transFee.toLocaleString('ko-KR')}원`);
+        if (hFee > 0) tripDetails.push(`숙박비: ${hFee.toLocaleString('ko-KR')}원`);
+        if (mFee > 0) tripDetails.push(`식비: ${mFee.toLocaleString('ko-KR')}원`);
+        if (aFee > 0) tripDetails.push(`일비: ${aFee.toLocaleString('ko-KR')}원`);
+        
+        let tripText = tripSub > 0 ? tripSub.toLocaleString('ko-KR') + ' 원' : '0 원';
+        if (tripDetails.length > 0) {
+            tripText += '\n(' + tripDetails.join(' | ') + ')';
+        }
+        p_tripSubtotal.innerText = tripText;
+
+        // Total Cost in Korean characters
+        const koreanWord = numberToKorean(total);
+        p_totalCost.innerHTML = `금 <strong>${koreanWord}</strong> 원 정<br>(₩ ${total.toLocaleString('ko-KR')})`;
+
+        // Radio check synchronization
+        const usefulnessElem = document.querySelector('input[name="usefulness"]:checked');
+        const selectedUsefulness = usefulnessElem ? usefulnessElem.value : '매우도움';
+        const introElem = document.querySelector('input[name="intro"]:checked');
+        const selectedIntro = introElem ? introElem.value : '도입원함';
+
+        document.querySelectorAll('.checkbox-preview .chk-box').forEach(box => {
+            box.classList.remove('chk-box-checked');
+            const frame = box.querySelector('.box-frame');
+            if (frame) frame.textContent = '[   ]';
+        });
+
+        // Sync Usefulness Evaluation
+        if (selectedUsefulness === '매우도움') {
+            const chk = document.getElementById('chk_help_very');
+            if (chk) {
+                chk.classList.add('chk-box-checked');
+                const frame = chk.querySelector('.box-frame');
+                if (frame) frame.textContent = '[ ○ ]';
+            }
+        } else if (selectedUsefulness === '참고') {
+            const chk = document.getElementById('chk_help_ref');
+            if (chk) {
+                chk.classList.add('chk-box-checked');
+                const frame = chk.querySelector('.box-frame');
+                if (frame) frame.textContent = '[ ○ ]';
+            }
+        } else if (selectedUsefulness === '필요없음') {
+            const chk = document.getElementById('chk_help_none');
+            if (chk) {
+                chk.classList.add('chk-box-checked');
+                const frame = chk.querySelector('.box-frame');
+                if (frame) frame.textContent = '[ ○ ]';
+            }
+        }
+
+        // Sync Intro Evaluation
+        if (selectedIntro === '도입원함') {
+            const chk = document.getElementById('chk_intro_yes');
+            if (chk) {
+                chk.classList.add('chk-box-checked');
+                const frame = chk.querySelector('.box-frame');
+                if (frame) frame.textContent = '[ ○ ]';
+            }
+        } else if (selectedIntro === '검토필요') {
+            const chk = document.getElementById('chk_intro_need');
+            if (chk) {
+                chk.classList.add('chk-box-checked');
+                const frame = chk.querySelector('.box-frame');
+                if (frame) frame.textContent = '[ ○ ]';
+            }
+        } else if (selectedIntro === '필요없음') {
+            const chk = document.getElementById('chk_intro_none');
+            if (chk) {
+                chk.classList.add('chk-box-checked');
+                const frame = chk.querySelector('.box-frame');
+                if (frame) frame.textContent = '[ ○ ]';
+            }
+        }
+    }
+
+    // Number to Korean String algorithm
+    function numberToKorean(num) {
+        if (num === 0) return '영';
+        const units = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'];
+        const smallUnits = ['', '십', '백', '천'];
+        const bigUnits = ['', '만', '억', '조', '경'];
+        
+        let numStr = num.toString();
+        let result = '';
+        
+        let parts = [];
+        for (let i = numStr.length; i > 0; i -= 4) {
+            parts.push(numStr.substring(Math.max(0, i - 4), i));
+        }
+        
+        for (let i = 0; i < parts.length; i++) {
+            let part = parts[i];
+            let partResult = '';
+            for (let j = 0; j < part.length; j++) {
+                let digit = parseInt(part[part.length - 1 - j]);
+                if (digit !== 0) {
+                    let digitChar = (digit === 1 && j > 0) ? '' : units[digit];
+                    partResult = digitChar + smallUnits[j] + partResult;
+                }
+            }
+            if (partResult !== '') {
+                result = partResult + bigUnits[i] + result;
+            }
+        }
+        return result;
+    }
+
+    // Save draft state to localStorage
+    function saveDraft() {
+        const formData = getFormData();
+        // Also save attached files metadata to preserve file state across reloads
+        formData.attachedEduFiles = attachedEduFiles.map(cleanFileMetadata);
+        formData.attachedCostFiles = attachedCostFiles.map(cleanFileMetadata);
+        formData.attachedOpinionFiles = attachedOpinionFiles.map(cleanFileMetadata);
+        
+        try {
+            localStorage.setItem('edureport_draft', JSON.stringify(formData));
+        } catch(e) {
+            console.warn("localStorage quota exceeded. Saving draft without file base64 data.");
+            // If base64 data makes draft too large, strip dataUrl for localstorage safety
+            formData.attachedEduFiles.forEach(f => f.dataUrl = null);
+            formData.attachedCostFiles.forEach(f => f.dataUrl = null);
+            formData.attachedOpinionFiles.forEach(f => f.dataUrl = null);
+            localStorage.setItem('edureport_draft', JSON.stringify(formData));
+        }
+    }
+
+    // Helper to strip heavy fields or raw files from file arrays before stringifying
+    function cleanFileMetadata(file) {
+        return {
+            id: file.id,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            dataUrl: file.dataUrl, // keep data url if possible for preview
+            parsed: file.parsed,
+            parsedData: file.parsedData
+        };
+    }
+
+    // Get current data as JSON
+    function getFormData() {
+        const usefulnessElem = document.querySelector('input[name="usefulness"]:checked');
+        const introElem = document.querySelector('input[name="intro"]:checked');
+        return {
+            userDept: userDept.value,
+            userPosition: userPosition.value,
+            userName: userName.value,
+            courseName: courseName.value,
+            courseHost: courseHost.value,
+            courseLocation: courseLocation.value,
+            startDate: startDate.value,
+            endDate: endDate.value,
+            tuitionFee: parseInt(tuitionFee.value) || 0,
+            transportFee: parseInt(transportFee.value) || 0,
+            hotelFee: parseInt(hotelFee.value) || 0,
+            mealFee: parseInt(mealFee.value) || 0,
+            allowanceFee: parseInt(allowanceFee.value) || 0,
+            courseOpinion: courseOpinion.value,
+            courseContent: courseContent.value,
+            businessPlan: businessPlan.value,
+            usefulness: usefulnessElem ? usefulnessElem.value : '매우도움',
+            intro: introElem ? introElem.value : '도입원함'
+        };
+    }
+
+    // Helper to format complex AI outputs (especially businessPlan) into clean text representation
+    function formatAiOutputValue(val) {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string') return val;
+        
+        if (Array.isArray(val)) {
+            if (val.every(item => typeof item === 'string')) {
+                return val.join('\n');
+            }
+            return val.map(item => formatAiOutputValue(item)).join('\n');
+        }
+        
+        if (typeof val === 'object') {
+            const keys = Object.keys(val);
+            const lowerKeys = keys.map(k => k.toLowerCase());
+            const has5w1h = lowerKeys.some(k => ['who', 'when', 'where', 'what', 'how', 'why', '누가', '언제', '어디서', '무엇을', '어떻게', '왜'].includes(k));
+            
+            if (has5w1h) {
+                const map = {
+                    who: val.who || val.누가 || '',
+                    when: val.when || val.언제 || '',
+                    where: val.where || val.어디서 || '',
+                    what: val.what || val.무엇을 || '',
+                    how: val.how || val.어떻게 || '',
+                    why: val.why || val.왜 || ''
+                };
+                return [
+                    map.who ? `- 누가(Who): ${map.who}` : '',
+                    map.when ? `- 언제(When): ${map.when}` : '',
+                    map.where ? `- 어디서(Where): ${map.where}` : '',
+                    map.what ? `- 무엇을(What): ${map.what}` : '',
+                    map.how ? `- 어떻게(How): ${map.how}` : '',
+                    map.why ? `- 왜(Why): ${map.why}` : ''
+                ].filter(s => s !== '').join('\n');
+            } else {
+                return Object.entries(val).map(([k, v]) => {
+                    if (typeof v === 'object') {
+                        return formatAiOutputValue(v);
+                    }
+                    if (!isNaN(k)) {
+                        return `- ${v}`;
+                    }
+                    return `- ${k}: ${v}`;
+                }).join('\n');
+            }
+        }
+        
+        return String(val);
+    }
+
+    // Apply JSON data object to Form Fields
+    function applyDataToForm(data, highlight = false) {
+        if (!data) return;
+        
+        const fields = [
+            { elem: userDept, val: data.userDept },
+            { elem: userPosition, val: data.userPosition },
+            { elem: userName, val: data.userName },
+            { elem: courseName, val: data.courseName },
+            { elem: courseHost, val: data.courseHost },
+            { elem: courseLocation, val: data.courseLocation },
+            { elem: startDate, val: data.startDate },
+            { elem: endDate, val: data.endDate },
+            { elem: tuitionFee, val: data.tuitionFee },
+            { elem: transportFee, val: data.transportFee },
+            { elem: hotelFee, val: data.hotelFee },
+            { elem: mealFee, val: data.mealFee },
+            { elem: allowanceFee, val: data.allowanceFee },
+            { elem: courseOpinion, val: data.courseOpinion },
+            { elem: courseContent, val: data.courseContent },
+            { elem: businessPlan, val: data.businessPlan }
+        ];
+
+        fields.forEach(field => {
+            if (field.val !== undefined && field.val !== null) {
+                let finalVal = field.val;
+                if (typeof finalVal === 'object') {
+                    finalVal = formatAiOutputValue(finalVal);
+                }
+                const oldVal = field.elem.value;
+                field.elem.value = finalVal;
+                
+                // Highlight changed fields
+                if (highlight && String(oldVal) !== String(finalVal) && finalVal !== "" && finalVal !== 0) {
+                    field.elem.classList.add('ai-highlighted');
+                    setTimeout(() => {
+                        field.elem.classList.remove('ai-highlighted');
+                    }, 2000);
+                }
+            }
+        });
+
+        // Set radio buttons
+        if (data.usefulness) {
+            const radio = document.querySelector(`input[name="usefulness"][value="${data.usefulness}"]`);
+            if (radio) radio.checked = true;
+        }
+        if (data.intro) {
+            const radio = document.querySelector(`input[name="intro"][value="${data.intro}"]`);
+            if (radio) radio.checked = true;
+        }
+
+        syncAll();
+        saveDraft();
+    }
+
+    // Save API key
+    function saveApiKey() {
+        const key = geminiApiKeyInput.value.trim();
+        if (key) {
+            if (!key.startsWith('AIzaSy')) {
+                showToast("경고: 입력하신 API Key가 'AIzaSy'로 시작하지 않습니다. 구글 Gemini API Key가 맞는지 확인해 주세요. (타사 API Key 입력 주의)", "error");
+            }
+            localStorage.setItem('edureport_gemini_api_key', key);
+            document.querySelector('.api-key-container').classList.add('api-key-saved');
+            showToast("Gemini API Key가 안전하게 브라우저에 저장되었습니다.", "success");
+        } else {
+            localStorage.removeItem('edureport_gemini_api_key');
+            document.querySelector('.api-key-container').classList.remove('api-key-saved');
+            showToast("Gemini API Key가 삭제되었습니다.", "success");
+        }
+    }
+
+    // Load selected Preset
+    function loadPreset() {
+        const selected = presetSelect.value;
+        if (!selected) {
+            showToast("로드할 샘플 데이터를 선택해 주세요.", "error");
+            return;
+        }
+        
+        // Clear current attached files
+        attachedEduFiles = [];
+        attachedCostFiles = [];
+        attachedOpinionFiles = [];
+        renderSectionFiles('edu');
+        renderSectionFiles('cost');
+        renderSectionFiles('opinion');
+        renderAnnexPages();
+
+        applyDataToForm(PRESETS[selected]);
+        showToast("샘플 데이터를 성공적으로 불러왔습니다.", "success");
+    }
+
+    // Reset with confirm
+    function resetFormWithConfirm() {
+        if (confirm("정말로 작성 중인 결과보고서 내용을 초기화하시겠습니까? (저장된 초안 및 첨부 파일도 삭제됩니다.)")) {
+            localStorage.removeItem('edureport_draft');
+            attachedEduFiles = [];
+            attachedCostFiles = [];
+            attachedOpinionFiles = [];
+            
+            renderSectionFiles('edu');
+            renderSectionFiles('cost');
+            renderSectionFiles('opinion');
+            renderAnnexPages();
+            
+            reportForm.reset();
+            const defaultUsefulness = document.querySelector('input[name="usefulness"][value="매우도움"]');
+            if (defaultUsefulness) defaultUsefulness.checked = true;
+            const defaultIntro = document.querySelector('input[name="intro"][value="도입원함"]');
+            if (defaultIntro) defaultIntro.checked = true;
+            syncAll();
+            showToast("작성 내용이 성공적으로 초기화되었습니다.", "success");
+        }
+    }
+
+    // Toggle theme (Dark/Light)
+    function toggleTheme() {
+        if (document.body.classList.contains('dark-theme')) {
+            document.body.classList.remove('dark-theme');
+            document.body.classList.add('light-theme');
+        } else {
+            document.body.classList.remove('light-theme');
+            document.body.classList.add('dark-theme');
+        }
+    }
+
+    // Toast system
+    function showToast(message, type = 'success') {
+        const toastId = 'toast_' + Date.now();
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.id = toastId;
+
+        const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
+        const title = type === 'success' ? '알림' : '경고';
+
+        toast.innerHTML = `
+            <i class="fa-solid ${icon} toast-icon"></i>
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close" onclick="document.getElementById('${toastId}').remove()"><i class="fa-solid fa-xmark"></i></button>
+        `;
+
+        document.getElementById('toastContainer').appendChild(toast);
+
+        // Auto remove
+        setTimeout(() => {
+            const t = document.getElementById(toastId);
+            if (t) t.remove();
+        }, 5000);
+    }
+
+    // Make showToast accessible globally for close button onclick
+    window.showToast = showToast;
+
+    // Form Submission & Print Validation
+    function handleFormSubmit(e) {
+        e.preventDefault();
+        
+        let invalidFields = [];
+        
+        // Check required fields
+        requiredInputs.forEach(item => {
+            const val = item.elem.value.trim();
+            const group = item.elem.closest('.input-group');
+            
+            // Numeric check - should be positive
+            if (item.elem.type === 'number') {
+                if (val === '' || parseInt(val) < 0) {
+                    group.classList.add('input-invalid');
+                    invalidFields.push(item);
+                } else {
+                    group.classList.remove('input-invalid');
+                }
+            } else {
+                // Text check
+                if (!val) {
+                    group.classList.add('input-invalid');
+                    invalidFields.push(item);
+                } else {
+                    group.classList.remove('input-invalid');
+                }
+            }
+        });
+
+        // Date validation: end date cannot be earlier than start date
+        if (startDate.value && endDate.value) {
+            const start = new Date(startDate.value);
+            const end = new Date(endDate.value);
+            if (end < start) {
+                const group = endDate.closest('.input-group');
+                group.classList.add('input-invalid');
+                group.querySelector('.error-msg').textContent = '종료일은 시작일보다 빠를 수 없습니다.';
+                invalidFields.push({ elem: endDate, name: '교육 종료일' });
+            }
+        }
+
+        if (invalidFields.length > 0) {
+            // Shake the first invalid field and scroll to it
+            const firstInvalid = invalidFields[0];
+            firstInvalid.elem.focus();
+            firstInvalid.elem.closest('.input-group').classList.add('input-invalid');
+            
+            // Trigger warning toast
+            const fieldNames = invalidFields.map(f => f.name).slice(0, 3).join(', ');
+            const suffix = invalidFields.length > 3 ? ' 외' : '';
+            showToast(`누락된 필수 항목[ ${fieldNames}${suffix} ]을 채워주세요.`, "error");
+            return;
+        }
+
+        // Success - trigger window print
+        window.print();
+    }
+
+    // Handle file selection from section input elements
+    function handleSectionFileSelect(e, section) {
+        const files = e.target.files;
+        if (files.length > 0) {
+            processSectionFiles(files, section);
+        }
+    }
+
+    // Process files for a specific section
+    function processSectionFiles(files, section) {
+        let apiKey = localStorage.getItem('edureport_gemini_api_key');
+        if (!apiKey) {
+            apiKey = geminiApiKeyInput.value.trim();
+            if (apiKey) {
+                if (!apiKey.startsWith('AIzaSy')) {
+                    showToast("경고: 입력하신 API Key가 'AIzaSy'로 시작하지 않습니다. 구글 Gemini API Key가 맞는지 확인해 주세요. (타사 API Key 입력 주의)", "error");
+                }
+                localStorage.setItem('edureport_gemini_api_key', apiKey);
+                document.querySelector('.api-key-container').classList.add('api-key-saved');
+            }
+        }
+        
+        Array.from(files).forEach(file => {
+            if (file.size > 25 * 1024 * 1024) {
+                showToast(`파일 크기가 너무 큽니다 (25MB 제한): ${file.name}`, "error");
+                return;
+            }
+
+            const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            const fileItem = {
+                id: fileId,
+                name: file.name,
+                size: (file.size / 1024).toFixed(1) + ' KB',
+                type: file.type,
+                rawFile: file,
+                dataUrl: null,
+                parsed: false,
+                parsedData: null
+            };
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                fileItem.dataUrl = e.target.result;
+                
+                // Put into respective section list
+                if (section === 'edu') {
+                    // Step 2 is single file oriented for schedule. We replace old files if new one uploaded
+                    attachedEduFiles = [fileItem];
+                    
+                    // Clear the edu info fields immediately so the user knows they are being overwritten
+                    courseName.value = '';
+                    courseHost.value = '';
+                    courseLocation.value = '';
+                    startDate.value = '';
+                    endDate.value = '';
+                    courseContent.value = '';
+                    syncAll();
+                } else if (section === 'cost') {
+                    // Step 3 allows multiple receipts and sums them up
+                    attachedCostFiles.push(fileItem);
+                } else if (section === 'opinion') {
+                    // Step 4 is single file oriented for syllabus/study materials
+                    attachedOpinionFiles = [fileItem];
+                    
+                    // Clear the opinion and plan fields immediately so the user knows they are being overwritten
+                    courseOpinion.value = '';
+                    businessPlan.value = '';
+                    syncAll();
+                }
+                
+                // Update UI list for this section
+                renderSectionFiles(section);
+                // Update printer annex pages
+                renderAnnexPages();
+
+                // Run AI parsing if key is available
+                if (apiKey) {
+                    runSectionGeminiParsing(fileItem, apiKey, section);
+                } else {
+                    showToast(`"${file.name}"이 첨부되었습니다. AI 분석을 활성화하려면 상단에 Gemini API Key를 입력하세요.`, "success");
+                }
+                saveDraft();
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Render list of files under a specific section dropzone
+    function renderSectionFiles(section) {
+        let listElement, fileArray;
+        if (section === 'edu') {
+            listElement = uploadListEdu;
+            fileArray = attachedEduFiles;
+        } else if (section === 'cost') {
+            listElement = uploadListCost;
+            fileArray = attachedCostFiles;
+        } else if (section === 'opinion') {
+            listElement = uploadListOpinion;
+            fileArray = attachedOpinionFiles;
+        }
+
+        listElement.innerHTML = '';
+        fileArray.forEach(file => {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            item.id = `ui_${file.id}`;
+            
+            const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+            const icon = isPdf ? 'fa-file-pdf' : 'fa-file-image';
+            
+            // Format status badge text
+            let statusText = '분석 대기';
+            let statusClass = 'status-parsing';
+            let extraStyle = '';
+            let errorTitle = '';
+            
+            if (file.parsed) {
+                statusText = 'AI 분석완료';
+                statusClass = 'status-success';
+                
+                // If it's a cost file, show the amount extracted
+                if (section === 'cost' && file.parsedData) {
+                    const trans = file.parsedData.transportFee || 0;
+                    const tui = file.parsedData.tuitionFee || 0;
+                    const sub = trans + tui + (file.parsedData.hotelFee || 0) + (file.parsedData.mealFee || 0) + (file.parsedData.allowanceFee || 0);
+                    if (sub > 0) {
+                        statusText = `총 ₩${sub.toLocaleString()} 추출됨`;
+                    }
+                }
+            } else if (file.error) {
+                statusText = '오류발생';
+                statusClass = 'status-error';
+                extraStyle = 'background-color: rgba(213, 0, 0, 0.2); color: var(--error-color); cursor: help;';
+                errorTitle = `title="${file.errorMessage || 'AI 분석 중 오류가 발생했습니다. 마우스를 대면 에러 메시지가 표시됩니다.'}"`;
+            }
+            
+            item.innerHTML = `
+                <div class="file-info">
+                    <i class="fa-solid ${icon}"></i>
+                    <div>
+                        <div class="file-name" title="${file.name}">${file.name}</div>
+                        <span class="file-size">${file.size}</span>
+                    </div>
+                </div>
+                <div class="file-status">
+                    <span class="badge status-badge ${statusClass}" id="status_${file.id}" style="${extraStyle}" ${errorTitle}>
+                        ${statusText}
+                    </span>
+                    <button type="button" class="delete-file-btn" onclick="window.deleteAttachedSectionFile('${file.id}', '${section}')"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+            `;
+            listElement.appendChild(item);
+        });
+    }
+
+    // Delete section file and trigger recalculations if cost file
+    function deleteAttachedSectionFile(id, section) {
+        if (section === 'edu') {
+            attachedEduFiles = attachedEduFiles.filter(f => f.id !== id);
+        } else if (section === 'cost') {
+            attachedCostFiles = attachedCostFiles.filter(f => f.id !== id);
+            // Re-calculate the cumulative expenses
+            recalculateCumulativeExpenses();
+        } else if (section === 'opinion') {
+            attachedOpinionFiles = attachedOpinionFiles.filter(f => f.id !== id);
+        }
+        
+        renderSectionFiles(section);
+        renderAnnexPages();
+        saveDraft();
+        showToast("증빙 문서가 삭제되었습니다.", "success");
+    }
+    window.deleteAttachedSectionFile = deleteAttachedSectionFile;
+
+    // Recalculates the tuition and travel expenses by summing all cost files
+    function recalculateCumulativeExpenses() {
+        let totalTuition = 0;
+        let totalTransport = 0;
+        let totalHotel = 0;
+        let totalMeal = 0;
+        let totalAllowance = 0;
+        
+        attachedCostFiles.forEach(file => {
+            if (file.parsed && file.parsedData) {
+                totalTuition += file.parsedData.tuitionFee || 0;
+                totalTransport += file.parsedData.transportFee || 0;
+                totalHotel += file.parsedData.hotelFee || 0;
+                totalMeal += file.parsedData.mealFee || 0;
+                totalAllowance += file.parsedData.allowanceFee || 0;
+            }
+        });
+        
+        tuitionFee.value = totalTuition;
+        transportFee.value = totalTransport;
+        hotelFee.value = totalHotel;
+        mealFee.value = totalMeal;
+        allowanceFee.value = totalAllowance;
+        
+        syncAll();
+    }
+
+    // Render Annex Pages at the end of the report preview combining all files
+    function renderAnnexPages() {
+        annexContainer.innerHTML = '';
+        const allFiles = [...attachedEduFiles, ...attachedCostFiles, ...attachedOpinionFiles];
+        
+        allFiles.forEach((file, index) => {
+            const page = document.createElement('div');
+            page.className = 'annex-page';
+            
+            const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+            const pageTitle = `[별첨 ${index + 1}]`;
+
+            let contentHtml = '';
+            if (isPdf) {
+                contentHtml = `
+                    <div class="receipt-pdf-placeholder">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <p><strong>PDF 파일 첨부 완료</strong></p>
+                        <p>${file.name}</p>
+                    </div>
+                `;
+            } else {
+                contentHtml = `<img src="${file.dataUrl}" alt="증빙자료 영수증">`;
+            }
+
+            page.innerHTML = `
+                <div class="sheet-content">
+                    <div class="annex-title">
+                        <span>${pageTitle} 위탁교육 관련 증빙자료</span>
+                        <span class="annex-no">별지 제3호 관련 첨부 문서</span>
+                    </div>
+                    <div class="annex-meta">
+                        <p><span class="annex-meta-label">파일명:</span> ${file.name}</p>
+                        <p><span class="annex-meta-label">파일크기:</span> ${file.size}</p>
+                        <p><span class="annex-meta-label">등록일시:</span> ${new Date().toLocaleString('ko-KR')}</p>
+                    </div>
+                    <div class="receipt-image-container">
+                        ${contentHtml}
+                    </div>
+                </div>
+            `;
+            annexContainer.appendChild(page);
+        });
+    }
+
+    // Run Section-Specific Gemini OCR Parser via Client Fetch API
+    async function runSectionGeminiParsing(fileItem, apiKey, section) {
+        loaderOverlay.style.display = 'flex';
+        
+        const statusEl = document.getElementById(`status_${fileItem.id}`);
+        if (statusEl) {
+            statusEl.className = 'badge status-badge status-parsing';
+            statusEl.textContent = 'AI 분석중...';
+        }
+
+        try {
+            const base64Data = fileItem.dataUrl.split(',')[1];
+            let mimeType = fileItem.type;
+            if (!mimeType) {
+                mimeType = fileItem.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
+            }
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+            let promptText = '';
+            
+            if (section === 'edu') {
+                loaderMessage.textContent = `"${fileItem.name}"에서 교육 기본 정보 및 커리큘럼 일정을 분석하는 중...`;
+                promptText = `
+                    당신은 교육 일정표, 안내문, 공문 등 교육 관련 안내 문서에서 필요한 정보를 추출하는 분석기입니다.
+                    먼저, 업로드된 문서가 교육 일정표, 공문, 프로그램 안내서인지 검증하십시오.
+                    만약 이 문서가 영수증, 항공권, 결제 확인서 등 비용이나 결제와 관련된 문서로 판단되면, 아래의 mismatch 규격으로 응답하십시오.
+                    만약 이 문서가 교안, 강의 슬라이드 등 본문 교재로 판단되면 mismatch 규격으로 응답하십시오.
+                    적합한 교육 일정표/안내서라면 정상 규격으로 응답하십시오.
+                    반드시 JSON 객체로만 응답해야 하며, Markdown 코드 블록 등은 제외하고 순수 JSON 문자열로만 응답하세요.
+
+                    [mismatch 규격 (문서 형식이 어긋날 경우)]:
+                    {
+                      "error": "mismatch",
+                      "detectedType": "cost",
+                      "message": "이 파일은 영수증 또는 비용 결제 내역으로 보입니다. '2. 교육 정보'에는 교육 일정표 또는 안내문을 업로드해 주세요."
+                    }
+
+                    [정상 규격]:
+                    {
+                      "courseName": "교육과정명 (교육 안내서에 기재된 공식 과정명)",
+                      "courseHost": "교육주관 기관 (예: 한국산업안전협회, 국제심사평가센터 등)",
+                      "courseLocation": "교육장소 (예: 서울, 본사 2층 회의실 등)",
+                      "startDate": "YYYY-MM-DD 형식의 교육 시작일",
+                      "endDate": "YYYY-MM-DD 형식의 교육 종료일",
+                      "courseContent": "정제된 주요 교육 내용 요약 (식사, 휴식, 산책 일정은 절대 배제하고 교과목 중심 작성)"
+                    }
+                    
+                    [중요 요구사항 - 주요 교육 내용(courseContent) 필터링 규칙]:
+                    - 주요 교육 내용(courseContent)을 정리할 때, 식사 시간(점심식사, 석식, 조식), 산책, 친교 시간, 휴식(Break Time), 안내/등록, 등록 확인 등 교육과 직접 관련 없는 비공식 일정이나 대기 시간은 **반드시 제외**하세요.
+                    - 오직 교안(커리큘럼)을 참조하여 공식적인 교육 과목, 핵심 학습 주제, 실습 세션들만 일차별 또는 논리적 순서대로 개조식으로 정제하여 줄바꿈(\\n)을 사용하여 요약 기입하세요.
+                `;
+            } else if (section === 'cost') {
+                loaderMessage.textContent = `"${fileItem.name}"에서 교통비, 수강료 등 수납 금액을 추출하는 중...`;
+                promptText = `
+                    당신은 영수증, 결제 확인서, 항공권 탑승권 영수증, 교육 수납서 등 비용 관련 증빙 문서에서 금액을 추출하는 회계 분석기입니다.
+                    먼저, 업로드된 문서가 영수증, 결제 확인서, 티켓 등 비용 증빙인지 검증하십시오.
+                    만약 이 문서가 교육 일정표, 공문, 팸플릿 등 교육 정보 안내서이거나 강의 자료(교재)인 경우, mismatch 규격으로 응답하십시오.
+                    적합한 비용 문서라면 정상 규격으로 응답하십시오.
+                    반드시 JSON 객체로만 응답해야 하며, Markdown 코드 블록 등은 제외하고 순수 JSON 문자열로만 응답하세요.
+
+                    [mismatch 규격 (문서 형식이 어긋날 경우)]:
+                    {
+                      "error": "mismatch",
+                      "detectedType": "edu",
+                      "message": "이 파일은 교육 일정 또는 안내서로 보입니다. '3. 소요 비용'에는 수강료 또는 출장비 영수증을 업로드해 주세요."
+                    }
+
+                    [정상 규격]:
+                    {
+                      "tuitionFee": 수강료 금액 (교육 참가 수강비 결제금액, 숫자만, 없으면 0),
+                      "transportFee": 교통비 금액 (예: 항공권 총 결제 요금, KTX/철도 요금 등 교통비 결제액, 숫자만, 없으면 0),
+                      "hotelFee": 숙박비 금액 (호텔/숙박 결제액, 숫자만, 없으면 0),
+                      "mealFee": 식비 금액 (식음료 영수증 결제액, 숫자만, 없으면 0),
+                      "allowanceFee": 일비 금액 (숫자만, 없으면 0)
+                    }
+                `;
+            } else if (section === 'opinion') {
+                loaderMessage.textContent = `"${fileItem.name}"을 분석하여 소감 및 업무활용계획을 자동 생성하는 중...`;
+                promptText = `
+                    당신은 교육 교재, 교안, 발표 요약본, 또는 학습 요약 노트를 보고 공식 결과보고서에 기입할 소감과 업무 적용 방안을 정교하게 대리 작성해 주는 AI 비서입니다.
+                    먼저, 업로드된 문서가 교육 교안, 강의자료, 실습교재, 발표 슬라이드 등 교육 내용에 관한 본문 문서인지 검증하십시오.
+                    만약 이 문서가 결제 영수증, 비행기 표, 청구서 등 비용 증빙인 경우, mismatch 규격으로 응답하십시오.
+                    적합한 교육 교재라면 정상 규격으로 응답하십시오.
+                    반드시 JSON 객체로만 응답해야 하며, Markdown 코드 블록 등은 제외하고 순수 JSON 문자열로만 응답하세요.
+
+                    [mismatch 규격 (문서 형식이 어긋날 경우)]:
+                    {
+                      "error": "mismatch",
+                      "detectedType": "cost",
+                      "message": "이 파일은 영수증 또는 비용 결제 내역으로 보입니다. '4. 교육 성과 및 소감'에는 교육 교안, 발표 자료 또는 필기본을 업로드해 주세요."
+                    }
+
+                    [정상 규격]:
+                    {
+                      "courseOpinion": "교육 교안의 세부 과목을 분석하여 지능적으로 생성한 교육 소감",
+                      "businessPlan": "5W1H 요소가 명시적으로 드러나도록 구체적으로 작성한 개조식 업무 활용 계획"
+                    }
+                    
+                    [글쓰기 지침]:
+                    - 교육 소감(courseOpinion): 해당 기술/개념(예: ISO 표준, MAAS 등)을 배운 의의와 본인의 이해도 증진 및 업무 시너지 기대감을 나타내는 정중하고 격조 높은 한국어 비즈니스 문체로 약 3-4문장 수준으로 작성하세요.
+                    - 업무 활용 계획(businessPlan): 누락 없이 5W1H (누가, 언제, 어디서, 무엇을, 어떻게, 왜) 형식에 명확하게 부합하여, 교육받은 지식을 실무(내부감사 참여, 시스템 정비 등)에 어떻게 활용할 것인지를 개조식으로 실무적이고 조리 있게 기술하세요.
+                `;
+            }
+
+            const requestBody = {
+                contents: [
+                    {
+                        parts: [
+                            { text: promptText },
+                            {
+                                inlineData: {
+                                    mimeType: mimeType,
+                                    data: base64Data
+                                }
+                            }
+                        ]
+                    }
+                ],
+                generationConfig: {
+                    responseMimeType: "application/json"
+                }
+            };
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                let errorMsg = `HTTP 에러 발생: ${response.status}`;
+                try {
+                    const errData = await response.json();
+                    if (errData && errData.error && errData.error.message) {
+                        errorMsg = errData.error.message;
+                    }
+                } catch (e) {
+                    // ignore JSON parse error on error response
+                }
+                throw new Error(errorMsg);
+            }
+
+            const resData = await response.json();
+            const generatedText = resData.candidates[0].content.parts[0].text;
+            const parsedData = JSON.parse(generatedText.trim());
+
+            if (parsedData.error === "mismatch") {
+                showToast(parsedData.message, "error");
+                fileItem.parsed = false;
+                fileItem.error = true;
+                fileItem.errorMessage = parsedData.message;
+                
+                const statusEl = document.getElementById(`status_${fileItem.id}`);
+                if (statusEl) {
+                    statusEl.className = 'badge status-badge status-parsing';
+                    statusEl.style.backgroundColor = 'rgba(213, 0, 0, 0.2)';
+                    statusEl.style.color = 'var(--error-color)';
+                    statusEl.textContent = '불일치';
+                }
+                
+                renderSectionFiles(section);
+                return;
+            }
+
+            fileItem.parsed = true;
+
+            if (section === 'cost') {
+                // Store parsed data inside this file item to allow summation
+                fileItem.parsedData = parsedData;
+                
+                // Recalculate sums of all cost files
+                recalculateCumulativeExpenses();
+                
+                let parsedCount = 0;
+                for (const key in parsedData) {
+                    if (parsedData[key] > 0) parsedCount++;
+                }
+                
+                renderSectionFiles('cost');
+                showToast(`비용 영수증 분석 완료! 수강료/출장비가 합계에 실시간 누적 합산되었습니다.`, "success");
+            } else {
+                // Apply data directly to form for Edu and Opinion sections
+                applyDataToForm(parsedData, true);
+                renderSectionFiles(section);
+                
+                let parsedCount = 0;
+                for (const key in parsedData) {
+                    if (parsedData[key]) parsedCount++;
+                }
+                
+                showToast(`AI 분석 완료! ${parsedCount}개의 보고서 항목을 자동으로 채웠습니다.`, "success");
+            }
+
+        } catch (error) {
+            console.error("Gemini AI Parsing Error:", error);
+            // Log to local server to read the error
+            fetch(`/log-error?msg=${encodeURIComponent(error.message)}&stack=${encodeURIComponent(error.stack)}`).catch(() => {});
+            
+            fileItem.parsed = false;
+            fileItem.error = true;
+            fileItem.errorMessage = error.message;
+            renderSectionFiles(section);
+            
+            showToast(`AI 분석 중 오류가 발생했습니다: ${error.message}`, "error");
+        } finally {
+            loaderOverlay.style.display = 'none';
+        }
+    }
+});
