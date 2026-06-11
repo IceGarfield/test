@@ -105,9 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Presets configuration
     const PRESETS = {
         preset1: {
-            userDept: "MaaS추진단",
+            userDept: "MaaS추진팀",
             userPosition: "대리",
-            userName: "김인영",
+            userName: "김OO",
             courseName: "프로세스 기반의 IT프로젝트 관리 입문 과정",
             courseHost: "한국인공지능 소프트웨어산업협회",
             courseLocation: "한국인공지능 소프트웨어산업협회 교육장",
