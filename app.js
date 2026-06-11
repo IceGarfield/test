@@ -981,13 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let contentHtml = '';
             if (isPdf) {
-                contentHtml = `
-                    <div class="receipt-pdf-placeholder">
-                        <i class="fa-solid fa-file-pdf"></i>
-                        <p><strong>PDF 파일 첨부 완료</strong></p>
-                        <p>${file.name}</p>
-                    </div>
-                `;
+                contentHtml = `<iframe src="${file.dataUrl}" class="annex-pdf-viewer"></iframe>`;
             } else {
                 contentHtml = `<img src="${file.dataUrl}" alt="증빙자료 영수증">`;
             }
