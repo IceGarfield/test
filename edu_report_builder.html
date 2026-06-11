@@ -1178,8 +1178,22 @@ body:not(.dark-theme) .moon-icon { display: block; }
         font-family: 'Noto Sans KR', sans-serif !important;
     }
 
-    .app-container, .app-workspace, .editor-panel, .preview-panel, .app-header, .toast-container, .loader-overlay {
+    /* Hide specific UI panels and controls */
+    .app-header, .editor-panel, .toast-container, .loader-overlay, .panel-header {
         display: none !important;
+    }
+
+    /* Reset structural containers to prevent hiding print elements */
+    .app-container, .app-workspace, .preview-panel {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        background: transparent !important;
+        overflow: visible !important;
     }
 
     /* Only show the print sheet and its annex pages */
@@ -1774,9 +1788,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Presets configuration
     const PRESETS = {
         preset1: {
-            userDept: "MaaS추진단",
+            userDept: "MaaS추진팀",
             userPosition: "대리",
-            userName: "김인영",
+            userName: "김OO",
             courseName: "프로세스 기반의 IT프로젝트 관리 입문 과정",
             courseHost: "한국인공지능 소프트웨어산업협회",
             courseLocation: "한국인공지능 소프트웨어산업협회 교육장",

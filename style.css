@@ -1165,8 +1165,22 @@ body:not(.dark-theme) .moon-icon { display: block; }
         font-family: 'Noto Sans KR', sans-serif !important;
     }
 
-    .app-container, .app-workspace, .editor-panel, .preview-panel, .app-header, .toast-container, .loader-overlay {
+    /* Hide specific UI panels and controls */
+    .app-header, .editor-panel, .toast-container, .loader-overlay, .panel-header {
         display: none !important;
+    }
+
+    /* Reset structural containers to prevent hiding print elements */
+    .app-container, .app-workspace, .preview-panel {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        background: transparent !important;
+        overflow: visible !important;
     }
 
     /* Only show the print sheet and its annex pages */
